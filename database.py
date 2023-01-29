@@ -21,13 +21,13 @@ class Database:
         self.pre_processor = None
 
     @staticmethod
-    def load_database(faiss_index_path: str, faiss_config_path: str):
+    def load_document_store(faiss_index_path: str, faiss_config_path: str):
         database = Database()
-        database.document_store = FAISSDocumentStore.load(index_path="", config_path="")
+        database.document_store = FAISSDocumentStore.load(index_path=faiss_index_path, config_path=faiss_config_path)
         logging.info("Database loaded. Existing Document Store initialized.")
         return database
 
-    def update_database(self, path_to_documents: str, retriever: haystack.nodes.EmbeddingRetriever):
+    def update_document_store(self, path_to_documents: str, retriever: haystack.nodes.EmbeddingRetriever):
         assert self.document_store is not None, "No Document Store to update. " \
                                             "Please load a database or create a new one"
         self.file_classifier = FileTypeClassifier()
@@ -57,22 +57,22 @@ class Database:
             os.remove(os.path.join(tray_dir, f))
         """
 
-    def create_database(self):
+    def launch_new_document_store(self):
         self.document_store = FAISSDocumentStore(faiss_index_factory_str="Flat",
                                                  sql_url="sqlite:///special_reports_faiss_store.db",
                                                  embedding_dim=764,
                                                  similarity="dot_product")
         logging.info("Database created. Initialized a new Document Store")
 
-    def extract_paragraphs(self, text_raw: str, line_number: int):
+    def extract_paragraphs(self, text_raw: str):
         """Given text documents, this method splits them into numbered paragraphs
         and saves the number of each paragraph.
         """
-        i = line_number
+        i = 0
 
         paragraph_number_list = []
         paragraph_list = []
-        while bool(match(r'This((\sSpecial\s)|\s)(R|r)eport\swas\sadopted\sby', text_raw[i])) == False:
+        while not bool(match(r'This((\sSpecial\s)|\s)(R|r)eport\swas\sadopted\sby', text_raw[i])):
             paragraph = ''
 
             # every paragraph must start with the number + '.' + tab sequence
@@ -93,13 +93,14 @@ class Database:
 
                 # search for a full stop at the end of the line (most bullet points do not end with full stops)
 
-                while bool(search(r'\.($|\s+$|\n)', text_raw[i][-10:-1])) == False:
+                while not bool(search(r'\.($|\s+$|\n)', text_raw[i][-10:-1])):
                     paragraph += ' ' + text_raw[i].strip('\n')
                     i += 1
 
                 paragraph += ' ' + text_raw[i].strip('\n')
                 paragraph_list.append(paragraph)
 
+        return paragraph_number_list, paragraph_list
 
     def extract_metadata(self, text_raw: str):
         """Given text documents, this method extracts report_title. Currently, it extracts only the title
@@ -112,7 +113,7 @@ class Database:
         i += 3
 
         report_info = ''
-        while bool(match(r'(t|T)ogether\swith', text_raw[i])) == False:
+        while not bool(match(r'(t|T)ogether\swith', text_raw[i])):
             report_info += (' ' + text_raw[i].strip('\n'))
             i += 1
             if i > 10:
