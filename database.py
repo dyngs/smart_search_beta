@@ -1,6 +1,7 @@
 from haystack.document_stores.faiss import FAISSDocumentStore
 from haystack.nodes import PDFToTextConverter, PDFToTextOCRConverter, TextConverter, FileTypeClassifier
 from haystack.nodes import PreProcessor, DocxToTextConverter
+from engine_v2 import Engine
 import logging
 from haystack.pipelines import Pipeline
 import os
@@ -21,10 +22,11 @@ class Database:
     def load_database(faiss_index_path: str, faiss_config_path: str):
         database = Database()
         database.document_store = FAISSDocumentStore.load(index_path="", config_path="")
+        logging.info("Database loaded. Existing Document Store initialized.")
         return database
 
-    def update_database(self, path_to_documents: str):
-        assert self.document_store is not None, "No Database to update. " \
+    def update_database(self, path_to_documents: str, retriever: Engine.model):
+        assert self.document_store is not None, "No Document Store to update. " \
                                             "Please load a database or create a new one"
         self.file_classifier = FileTypeClassifier()
         self.converter_pdf = PDFToTextOCRConverter()
@@ -36,15 +38,22 @@ class Database:
                                           split_by="passage",
                                           split_respect_sentence_boundary=True,
                                           split_overlap=0)
+
         dir = os.listdir(path_to_documents)
         assert len(dir) > 0, f"{dir} is empty. Please provide a non-empty directory."
-        self.load_documents(path_to_documents)
+        new_documents = self.load_documents(path_to_documents)
+        self.document_store.write_documents(new_documents)
+        # add assertion, must be the same retriever
+        self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=False)
+        logging.info("New documents embedded. Database updated.")
+
 
     def create_database(self):
         self.document_store = FAISSDocumentStore(faiss_index_factory_str="Flat",
                                                  sql_url="sqlite:///special_reports_faiss_store.db",
                                                  embedding_dim=764,
                                                  similarity="dot_product")
+        logging.info("Database created. Initialized a new Document Store")
 
     def extract_paragraphs(self):
         """Given text documents, this method splits them into numbered paragraphs
