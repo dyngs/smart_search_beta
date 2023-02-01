@@ -81,7 +81,8 @@ class SRExtractor(BaseComponent):
 
         return title, report_info
 
-        def run(self):
+        def run(self, text, pdf, docx):
+
             pass
 
         def run_batch(self):
