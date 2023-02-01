@@ -1,10 +1,15 @@
+import haystack.nodes
 from haystack.document_stores.faiss import FAISSDocumentStore
 from haystack.nodes import PDFToTextConverter, PDFToTextOCRConverter, TextConverter, FileTypeClassifier
-from haystack.nodes import PreProcessor, DocxToTextConverter
+from haystack.nodes import PreProcessor, DocxToTextConverter, EmbeddingRetriever
+from engine_v2 import Engine
 import logging
 from haystack.pipelines import Pipeline
 import os
+#from special_reports_extractor import SRExtractor
+import re
 
+haystack.HAYSRACK_TELEMETRY_ENABLED = False
 
 class Database:
 
@@ -16,15 +21,17 @@ class Database:
         self.converter_docx = None
         self.converter_text = None
         self.pre_processor = None
+        self.extractor = None
 
     @staticmethod
-    def load_database(faiss_index_path: str, faiss_config_path: str):
+    def load_document_store(faiss_index_path: str, faiss_config_path: str):
         database = Database()
-        database.document_store = FAISSDocumentStore.load(index_path="", config_path="")
+        database.document_store = FAISSDocumentStore.load(index_path=faiss_index_path, config_path=faiss_config_path)
+        logging.info("Database loaded. Existing Document Store initialized.")
         return database
 
-    def update_database(self, path_to_documents: str):
-        assert self.document_store is not None, "No Database to update. " \
+    def update_document_store(self, path_to_documents: str, retriever: haystack.nodes.EmbeddingRetriever):
+        assert self.document_store is not None, "No Document Store to update. " \
                                             "Please load a database or create a new one"
         self.file_classifier = FileTypeClassifier()
         self.converter_pdf = PDFToTextOCRConverter()
@@ -36,26 +43,31 @@ class Database:
                                           split_by="passage",
                                           split_respect_sentence_boundary=True,
                                           split_overlap=0)
-        dir = os.listdir(path_to_documents)
-        assert len(dir) > 0, f"{dir} is empty. Please provide a non-empty directory."
-        self.load_documents(path_to_documents)
 
-    def create_database(self):
+        tray_dir = os.listdir(path_to_documents)
+        assert len(tray_dir) > 0, f"{tray_dir} is empty. Please provide a non-empty directory."
+        new_documents = self.load_documents(path_to_documents)
+        self.document_store.write_documents(new_documents)
+        # add assertion, must be the same retriever
+        self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=False)
+        logging.info("New documents embedded. Database updated.")
+
+        """
+        for f in os.listdir(tray_dir):
+            if not f.endswith(".txt") or f.endswith(".pdf") or f.endswith(".docx"):
+                continue
+            assert os.chdir == os.path.join(tray_dir), "Wrong directory!"
+            os.remove(os.path.join(tray_dir, f))
+        """
+
+    def launch_new_document_store(self):
         self.document_store = FAISSDocumentStore(faiss_index_factory_str="Flat",
                                                  sql_url="sqlite:///special_reports_faiss_store.db",
                                                  embedding_dim=764,
                                                  similarity="dot_product")
+        logging.info("Database created. Initialized a new Document Store")
 
-    def extract_paragraphs(self):
-        """Given text documents, this method splits them into numbered paragraphs
-        and saves the number of each paragraph.
-        """
-        pass
 
-    def extract_metadata(self):
-        """Given text documents, this method extracts report_guid, report_title
-        """
-        pass
 
     def load_documents(self, path_to_documents: str):
         """This method take a relative path to a folder with documents of different types.
@@ -64,16 +76,43 @@ class Database:
         :param: path_to_documents: relative path to the folder with new documents (pdf,text, or docx)
         :return: haystack Documents"""
 
-        documents_processed = None
-        # 1.open path_to_documents and open one-by-one, classify the type, convert to text
-        converted_documents = None
+        documents_processed = []
 
-        # 2. Extract metadata for the whole document
-        meta_data = self.extract_metadata()
+        pipeline_preprocessing = Pipeline()
+        pipeline_preprocessing.add_node(component=self.file_classifier, name="FileTypeClassifier",
+                                        inputs=["File"])
+        pipeline_preprocessing.add_node(component=self.converter_text, name="TextConverter",
+                                        inputs=["FileTypeClassifier.output_1"])
+        pipeline_preprocessing.add_node(component=self.converter_pdf, name="PdfConverter",
+                                        inputs=["FileTypeClassifier.output_2"])
+        pipeline_preprocessing.add_node(component=self.converter_docx, name="DocxConverter",
+                                        inputs=["FileTypeClassifier.output_4"])
+        """
+        pipeline_preprocessing.add_node(component=self.extractor, name="SRExtractor",
+                                        inputs=["TextConverter", "PdfConverter", "DocxConverter"])
+        """
+        for file in os.listdir(path_to_documents):
+            # 1.open path_to_documents and open one-by-one, classify the type, convert to text
+            converted_document = pipeline_preprocessing.run(file_paths=[os.path.join(path_to_documents, file)])
+            # 2. Extract metadata for the whole document
+            text_raw = self.document_preprocess_for_extration(converted_document["documents"][0].content)
+            report_title, report_info = self.extract_metadata(text_raw)
+            # 3. Split into paragraphs and save paragraph numbers in a list
+            paragraph_numbers, paragraphs = self.extract_paragraphs(text_raw)
+            # 4. Pre-process each paragraph, save as Documents, and metadata to each
+            document_paragraphs = self.pre_processor.process(paragraphs)
+            assert len(document_paragraphs) == len(paragraph_numbers), "Too many documents"
 
-        # 3. Split into paragraphs and save paragraph numbers
+            # add metadata and paragraph number to each paragraph
+            i = 0
+            for doc in document_paragraphs:
+                doc.meta["report_title"] = report_title
+                doc.meta["report_info"] = report_info
+                doc.meta["paragraph_number"] = paragraph_numbers[i]
+                i += 1
 
-        # 4. Pre-process each paragraph, save as Documents, and metadata to each
+            documents_processed.append(document_paragraphs)
 
         return documents_processed
+
 
