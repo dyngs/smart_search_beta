@@ -5,9 +5,11 @@ from haystack.nodes import PreProcessor, DocxToTextConverter, EmbeddingRetriever
 from engine_v2 import Engine
 import logging
 from haystack.pipelines import Pipeline
-from re import match, search
 import os
+#from special_reports_extractor import SRExtractor
+import re
 
+haystack.HAYSRACK_TELEMETRY_ENABLED = False
 
 class Database:
 
@@ -19,6 +21,7 @@ class Database:
         self.converter_docx = None
         self.converter_text = None
         self.pre_processor = None
+        self.extractor = None
 
     @staticmethod
     def load_document_store(faiss_index_path: str, faiss_config_path: str):
@@ -26,6 +29,78 @@ class Database:
         database.document_store = FAISSDocumentStore.load(index_path=faiss_index_path, config_path=faiss_config_path)
         logging.info("Database loaded. Existing Document Store initialized.")
         return database
+    @staticmethod
+    def document_preprocess_for_extraction(document: str) -> list:
+        text_raw = []
+
+        for line in document.splitlines():
+            if not (line.strip() or line.strip('\n')):
+                continue
+            else:
+                text_raw.append(line)
+
+        return text_raw
+    @staticmethod
+    def extract_paragraphs(text_raw: list):
+        """Given text documents, this method splits them into numbered paragraphs
+        and saves the number of each paragraph.
+        """
+        i = 0
+
+        paragraph_number_list = []
+        paragraph_list = []
+        while bool(re.match(r'This((\sSpecial\s)|\s)(R|r)eport\swas\sadopted\sby', text_raw[i])) == False:
+            paragraph = ''
+            # every paragraph must start with the number + '.' + tab sequence
+
+            if bool(re.match(r'^(\d|\d\d|\d\d\d)\.\t', text_raw[i][0:10])):
+                if bool(re.match(r'^\d\d\.', text_raw[i])):
+                    paragraph_number_list.append(int(text_raw[i][0:2]))
+                    paragraph += text_raw[i][4:].strip('\n').rstrip()
+                    i += 1
+                elif bool(re.match(r'^\d\d\d\.', text_raw[i])):
+                    paragraph_number_list.append(int(text_raw[i][0:3]))
+                    paragraph += text_raw[i][5:].strip('\n').rstrip()
+                    i += 1
+                else:
+                    paragraph_number_list.append(int(text_raw[i][0]))
+                    paragraph += text_raw[i][3:].strip('\n').rstrip()
+                    i += 1
+
+                # search for a full stop at the end of the line (most bullet points do not end with full stops) (bool(re.search(r'\.($|\s+$|\n)', text_raw[i][len(text_raw[i])-10:])) == False) and
+
+                while (bool(re.match(r'^(\d|\d\d|\d\d\d)\.', text_raw[i+1][:5])) == False):
+
+                    if bool(re.match(r'This((\sSpecial\s)|\s)(R|r)eport\swas\sadopted\sby', text_raw[i+1])):
+                        break
+                    paragraph += ' ' + text_raw[i].strip('\n').rstrip()
+                    i += 1
+
+                paragraph += ' ' + text_raw[i].strip('\n').rstrip()
+                paragraph_list.append(paragraph)
+
+            i += 1
+
+        return paragraph_number_list, paragraph_list
+    @staticmethod
+    def extract_metadata(text_raw: list):
+        """Given text documents, this method extracts report_title. Currently, it extracts only the title
+        and report info.
+        """
+        i = 0
+        if bool(re.match(r'\((p|P)ersuant\sto', text_raw[i].strip('\n'))):
+            i += 1
+        title = (text_raw[i].strip('\n').strip('\t') + ': ' + text_raw[i + 2].strip('\n'))
+        i += 3
+
+        report_info = ''
+        while bool(re.match(r'(t|T)ogether\swith', text_raw[i])) == False:
+            report_info += ' ' + text_raw[i].strip('\n')
+            i += 1
+            if i > 10:
+                break
+
+        return title, report_info
 
     def update_document_store(self, path_to_documents: str, retriever: haystack.nodes.EmbeddingRetriever):
         assert self.document_store is not None, "No Document Store to update. " \
@@ -64,62 +139,7 @@ class Database:
                                                  similarity="dot_product")
         logging.info("Database created. Initialized a new Document Store")
 
-    def extract_paragraphs(self, text_raw: str):
-        """Given text documents, this method splits them into numbered paragraphs
-        and saves the number of each paragraph.
-        """
-        i = 0
 
-        paragraph_number_list = []
-        paragraph_list = []
-        while not bool(match(r'This((\sSpecial\s)|\s)(R|r)eport\swas\sadopted\sby', text_raw[i])):
-            paragraph = ''
-
-            # every paragraph must start with the number + '.' + tab sequence
-
-            if bool(match(r'^(\d|\d\d|\d\d\d)\.\t', text_raw[i][0:10])):
-                if bool(match(r'^\d\d\.', text_raw[i])):
-                    paragraph_number_list.append(int(text_raw[i][0:2]))
-                    paragraph += ' ' + text_raw[i][4:].strip('\n')
-                    i += 1
-                elif bool(match(r'^\d\d\d', text_raw[i])):
-                    paragraph_number_list.append(int(text_raw[i][0:3]))
-                    paragraph += ' ' + text_raw[i][5:].strip('\n')
-                    i += 1
-                else:
-                    paragraph_number_list.append(int(text_raw[i][0]))
-                    paragraph += ' ' + text_raw[i][3:].strip('\n')
-                    i += 1
-
-                # search for a full stop at the end of the line (most bullet points do not end with full stops)
-
-                while not bool(search(r'\.($|\s+$|\n)', text_raw[i][-10:-1])):
-                    paragraph += ' ' + text_raw[i].strip('\n')
-                    i += 1
-
-                paragraph += ' ' + text_raw[i].strip('\n')
-                paragraph_list.append(paragraph)
-
-        return paragraph_number_list, paragraph_list
-
-    def extract_metadata(self, text_raw: str):
-        """Given text documents, this method extracts report_title. Currently, it extracts only the title
-        and report info.
-        """
-        i = 0
-        if bool(match(r'\((p|P)ersuant\sto', text_raw[i].strip('\n'))):
-            i += 1
-        title = (text_raw[i].strip('\n').strip('\t') + ': ' + text_raw[i + 2].strip('\n'))
-        i += 3
-
-        report_info = ''
-        while not bool(match(r'(t|T)ogether\swith', text_raw[i])):
-            report_info += (' ' + text_raw[i].strip('\n'))
-            i += 1
-            if i > 10:
-                break
-
-        return title, report_info, i
 
     def load_documents(self, path_to_documents: str):
         """This method take a relative path to a folder with documents of different types.
@@ -131,22 +151,26 @@ class Database:
         documents_processed = []
 
         pipeline_preprocessing = Pipeline()
-        pipeline_preprocessing.add_node(component=self.file_classifier, name="FyleTypeClassifier",
+        pipeline_preprocessing.add_node(component=self.file_classifier, name="FileTypeClassifier",
                                         inputs=["File"])
-        pipeline_preprocessing.add_node(component=self.converter_txt, name="TextConverter",
+        pipeline_preprocessing.add_node(component=self.converter_text, name="TextConverter",
                                         inputs=["FileTypeClassifier.output_1"])
         pipeline_preprocessing.add_node(component=self.converter_pdf, name="PdfConverter",
                                         inputs=["FileTypeClassifier.output_2"])
         pipeline_preprocessing.add_node(component=self.converter_docx, name="DocxConverter",
                                         inputs=["FileTypeClassifier.output_4"])
-
+        """
+        pipeline_preprocessing.add_node(component=self.extractor, name="SRExtractor",
+                                        inputs=["TextConverter", "PdfConverter", "DocxConverter"])
+        """
         for file in os.listdir(path_to_documents):
             # 1.open path_to_documents and open one-by-one, classify the type, convert to text
             converted_document = pipeline_preprocessing.run(file_paths=[os.path.join(path_to_documents, file)])
             # 2. Extract metadata for the whole document
-            report_title, report_info, line_number = self.extract_metadata(converted_document)
+            text_raw = self.document_preprocess_for_extration(converted_document["documents"][0].content)
+            report_title, report_info = self.extract_metadata(text_raw)
             # 3. Split into paragraphs and save paragraph numbers in a list
-            paragraph_numbers, paragraphs = self.extract_paragraphs(converted_document, line_number)
+            paragraph_numbers, paragraphs = self.extract_paragraphs(text_raw)
             # 4. Pre-process each paragraph, save as Documents, and metadata to each
             document_paragraphs = self.pre_processor.process(paragraphs)
             assert len(document_paragraphs) == len(paragraph_numbers), "Too many documents"
@@ -162,3 +186,5 @@ class Database:
             documents_processed.append(document_paragraphs)
 
         return documents_processed
+
+
