@@ -6,7 +6,7 @@ from engine_v2 import Engine
 import logging
 from haystack.pipelines import Pipeline
 import os
-#from special_reports_extractor import SRExtractor
+from special_reports_extractor import SrExtractor
 import re
 
 haystack.HAYSRACK_TELEMETRY_ENABLED = False
@@ -23,12 +23,10 @@ class Database:
         self.pre_processor = None
         self.extractor = None
 
-    @staticmethod
-    def load_document_store(faiss_index_path: str, faiss_config_path: str):
-        database = Database()
-        database.document_store = FAISSDocumentStore.load(index_path=faiss_index_path, config_path=faiss_config_path)
+
+    def load_document_store(self, faiss_index_path: str, faiss_config_path: str):
+        self.document_store = FAISSDocumentStore.load(index_path=faiss_index_path, config_path=faiss_config_path)
         logging.info("Database loaded. Existing Document Store initialized.")
-        return database
 
     def update_document_store(self, path_to_documents: str, retriever: haystack.nodes.EmbeddingRetriever):
         assert self.document_store is not None, "No Document Store to update. " \
@@ -37,19 +35,21 @@ class Database:
         self.converter_pdf = PDFToTextOCRConverter()
         self.converter_docx = DocxToTextConverter()
         self.converter_text = TextConverter()
+        self.extractor = SrExtractor()
         self.pre_processor = PreProcessor(clean_empty_lines=True,
                                           clean_whitespace=True,
                                           clean_header_footer=True,
                                           split_by="passage",
-                                          split_respect_sentence_boundary=True,
+                                          split_respect_sentence_boundary=False,
                                           split_overlap=0)
+
 
         tray_dir = os.listdir(path_to_documents)
         assert len(tray_dir) > 0, f"{tray_dir} is empty. Please provide a non-empty directory."
         new_documents = self.load_documents(path_to_documents)
         self.document_store.write_documents(new_documents)
         # add assertion, must be the same retriever
-        self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=False)
+        self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=True)
         logging.info("New documents embedded. Database updated.")
 
         """
@@ -60,10 +60,11 @@ class Database:
             os.remove(os.path.join(tray_dir, f))
         """
 
-    def launch_new_document_store(self):
+    def launch_new_document_store(self, set_file_name="special_reports_faiss_store"):
+        assert not os.path.exists(f"{os.getcwd()}/{set_file_name}.db"), "A Document Store with this name already exits. Please load it."
         self.document_store = FAISSDocumentStore(faiss_index_factory_str="Flat",
-                                                 sql_url="sqlite:///special_reports_faiss_store.db",
-                                                 embedding_dim=764,
+                                                 sql_url=f"sqlite:///{set_file_name}.db",
+                                                 embedding_dim=768,
                                                  similarity="dot_product")
         logging.info("Database created. Initialized a new Document Store")
 
@@ -87,31 +88,13 @@ class Database:
                                         inputs=["FileTypeClassifier.output_2"])
         pipeline_preprocessing.add_node(component=self.converter_docx, name="DocxConverter",
                                         inputs=["FileTypeClassifier.output_4"])
-        """
-        pipeline_preprocessing.add_node(component=self.extractor, name="SRExtractor",
-                                        inputs=["TextConverter", "PdfConverter", "DocxConverter"])
-        """
+        pipeline_preprocessing.add_node(component=self.extractor, name="SrExtractor",
+                                      inputs=["TextConverter", "PdfConverter", "DocxConverter"])
+
         for file in os.listdir(path_to_documents):
-            # 1.open path_to_documents and open one-by-one, classify the type, convert to text
+            # 1.open path_to_documents and open one-by-one, classify the type, convert to text, extract metadata and paragraphs
             converted_document = pipeline_preprocessing.run(file_paths=[os.path.join(path_to_documents, file)])
-            # 2. Extract metadata for the whole document
-            text_raw = self.document_preprocess_for_extration(converted_document["documents"][0].content)
-            report_title, report_info = self.extract_metadata(text_raw)
-            # 3. Split into paragraphs and save paragraph numbers in a list
-            paragraph_numbers, paragraphs = self.extract_paragraphs(text_raw)
-            # 4. Pre-process each paragraph, save as Documents, and metadata to each
-            document_paragraphs = self.pre_processor.process(paragraphs)
-            assert len(document_paragraphs) == len(paragraph_numbers), "Too many documents"
-
-            # add metadata and paragraph number to each paragraph
-            i = 0
-            for doc in document_paragraphs:
-                doc.meta["report_title"] = report_title
-                doc.meta["report_info"] = report_info
-                doc.meta["paragraph_number"] = paragraph_numbers[i]
-                i += 1
-
-            documents_processed.append(document_paragraphs)
+            documents_processed = self.pre_processor.process(converted_document["documents"])
 
         return documents_processed
 
