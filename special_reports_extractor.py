@@ -84,7 +84,7 @@ class SrExtractor(BaseComponent):
         :returns title, report_info: e.g., report_info="Special Report 34/2012, report_title="Auditing is fun"
         """
         i = 0
-        if bool(re.match(r'\((p|P)ersuant\sto', text_raw[i].strip('\n'))):
+        if bool(re.match(r'\(([Pp])ersuant\sto', text_raw[i].strip('\n'))):
             i += 1
         report_info = (text_raw[i].strip('\n').strip('\t'))
         i += 2
