@@ -17,6 +17,6 @@ def test_load_and_update():
     test_database = Database()
     test_database.launch_new_document_store()
     retriever_test = EmbeddingRetriever(document_store=test_database.document_store,
-                                                  embedding_model="/Users/dyngs/Desktop/IntelligentSearch/smartsearchv0.4/Models/4_eca_retriever_sr_disitlbert-dot-tas_b-b256-msmarco",
-                                                  model_format="sentence_transformers")
-    test_database.update_document_store('tests/', retriever_test)
+                                        embedding_model="/Users/dyngs/Desktop/IntelligentSearch/smartsearchv0.4/Models/4_eca_retriever_sr_disitlbert-dot-tas_b-b256-msmarco",
+                                        model_format="sentence_transformers")
+    test_database.update_document_store('tests/test_data_database', retriever_test)
