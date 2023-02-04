@@ -49,7 +49,6 @@ class Database:
         tray_dir = os.listdir(path_to_documents)
         assert len(tray_dir) > 0, f"{tray_dir} is empty. Please provide a non-empty directory."
         new_documents = self.load_documents(path_to_documents)
-        print(len(new_documents))
         self.document_store.write_documents(new_documents)
         # add assertion, must be the same retriever
         self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=True)
@@ -103,10 +102,14 @@ class Database:
 
         self.current_number_of_documents += len(documents_processed[0])
 
+        logging.info("Database update successfully.")
+
         return documents_processed[0]
 
     def save_database(self, path: str):
         """This method saves the Document Store of the database with a time stamp."""
 
         self.name = f"special_report_database_at_{str(int(time.time())).replace(' ', '_')}"
-        self.document_store.save(index_path=os.path.join(path, self.name))
+        self.document_store.save(index_path=os.path.join(path, self.name + ".faiss"))
+
+        logging.info("Database saved successfully.")

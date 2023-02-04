@@ -24,9 +24,7 @@ def test_save_and_load():
     test_database = Database()
     test_database.launch_new_document_store(set_file_name="test3")
     test_database.save_database("")
-    test_database_2 = Database().load_document_store(faiss_index_path=os.path.join(os.getcwd(),
-                                                                                   test_database.name + ".faiss"),
-                                                     faiss_config_path=os.path.join(os.getcwd(),
-                                                                                    test_database.name + ".json"))
+    test_database_2 = Database()
+    test_database_2.load_document_store(faiss_index_path=os.path.join(os.getcwd(), test_database.name + ".faiss"),
+                                        faiss_config_path=os.path.join(os.getcwd(), test_database.name + ".json"))
     assert test_database_2.document_store is not None
-
