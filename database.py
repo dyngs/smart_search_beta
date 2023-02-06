@@ -1,3 +1,4 @@
+from typing import Optional, List, Dict
 import time
 import haystack.nodes
 from haystack.document_stores.faiss import FAISSDocumentStore
@@ -8,8 +9,8 @@ from haystack.pipelines import Pipeline
 import os
 from special_reports_extractor import SrExtractor
 
-
 haystack.HAYSTACK_TELEMETRY_ENABLED = False
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -26,14 +27,14 @@ class Database:
         self.name = ""
 
     def load_document_store(self, faiss_index_path: str, faiss_config_path: str):
-
+        self.name = faiss_index_path[:-5]
         self.document_store = FAISSDocumentStore.load(index_path=faiss_index_path, config_path=faiss_config_path)
-        logging.info("Database loaded. Existing Document Store initialized.")
+        logger.info("Database loaded. Existing Document Store initialized.")
 
     def update_document_store(self, path_to_documents: str, retriever: haystack.nodes.EmbeddingRetriever):
 
         assert self.document_store is not None, "No Document Store to update. " \
-                                            "Please load a database or create a new one"
+                                                "Please load a database or create a new one"
         self.file_classifier = FileTypeClassifier()
         self.converter_pdf = PDFToTextOCRConverter()
         self.converter_docx = DocxToTextConverter()
@@ -52,7 +53,7 @@ class Database:
         self.document_store.write_documents(new_documents)
         # add assertion, must be the same retriever
         self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=True)
-        logging.info("New documents embedded. Database updated.")
+        logger.info("New documents embedded. Database updated.")
         """
         if not test:
             for f in os.listdir(tray_dir):
@@ -63,15 +64,15 @@ class Database:
         """
 
     def launch_new_document_store(self, set_file_name="special_reports_faiss_store"):
-        print(os.getcwd())
-        assert not os.path.exists(f"{os.getcwd()}/{set_file_name}.db"), "A Document Store with this name " \
-                                                                        "already exits. Please load it."
+        self.name = set_file_name
+        assert not os.path.exists(f"{os.getcwd()}/{self.name}.db"), "A Document Store with this name " \
+                                                                    "already exits. Please load it."
 
         self.document_store = FAISSDocumentStore(faiss_index_factory_str="Flat",
-                                                 sql_url=f"sqlite:///{set_file_name}.db",
+                                                 sql_url=f"sqlite:///{self.name}.db",
                                                  embedding_dim=768,
                                                  similarity="dot_product")
-        logging.info("Database created. Initialized a new Document Store")
+        logger.info("Database created. Initialized a new Document Store")
 
     def load_documents(self, path_to_documents: str):
         """This method take a relative path to a folder with documents of different types.
@@ -102,14 +103,12 @@ class Database:
 
         self.current_number_of_documents += len(documents_processed[0])
 
-        logging.info("Database update successfully.")
+        logger.info("Database update successfully.")
 
         return documents_processed[0]
 
-    def save_database(self, path: str):
+    def save_database(self):
         """This method saves the Document Store of the database with a time stamp."""
+        self.document_store.save(index_path=self.name + ".faiss")
 
-        self.name = f"special_report_database_at_{str(int(time.time())).replace(' ', '_')}"
-        self.document_store.save(index_path=os.path.join(path, self.name + ".faiss"))
-
-        logging.info("Database saved successfully.")
+        logger.info("Database saved successfully.")
