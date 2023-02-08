@@ -23,7 +23,6 @@ class Database:
         self.converter_text = None
         self.pre_processor = None
         self.extractor = None
-        self.current_number_of_documents = 0
         self.name = ""
 
     def load_document_store(self, faiss_index_path: str, faiss_config_path: str):
@@ -52,7 +51,7 @@ class Database:
         new_documents = self.load_documents(path_to_documents)
         self.document_store.write_documents(new_documents)
         # add assertion, must be the same retriever
-        self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=True)
+        self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=False)
         logger.info("New documents embedded. Database updated.")
         """
         if not test:
@@ -99,16 +98,39 @@ class Database:
             # Open path_to_documents and open one-by-one, classify the type,
             # convert to text, extract metadata and paragraphs
             converted_document = pipeline_preprocessing.run(file_paths=[os.path.join(path_to_documents, file)])
-            documents_processed.append(self.pre_processor.process(converted_document["documents"]))
-
-        self.current_number_of_documents += len(documents_processed[0])
+            documents_processed.extend(self.pre_processor.process(converted_document["documents"]))
 
         logger.info("Database update successfully.")
 
-        return documents_processed[0]
+        return documents_processed
 
     def save_database(self):
-        """This method saves the Document Store of the database with a time stamp."""
+        """This method saves the Document Store of the database."""
         self.document_store.save(index_path=self.name + ".faiss")
 
         logger.info("Database saved successfully.")
+
+    """
+    def append_context(self):
+        document_generator_forward = self.document_store.get_all_documents_generator()
+        document_generator_backward = self.document_store.get_all_documents_generator()
+        document_generator = self.document_store.get_all_documents_generator()
+        next(document_generator_forward)  # move to document #1
+        next_document_id = next(document_generator_forward)  # move to document #2
+        first_document = next(document_generator)
+        previous_document = next(document_generator_backward)
+        next_document = next(document_generator_forward)
+        first_document.meta["id_next"] = next_document_id.id
+        for document in document_generator:
+            if document.meta["title"] == next_document.meta["title"]:
+                document.meta["id_next"] = next_document.id
+
+            if document.meta["title"] == previous_document.meta["title"]:
+                document.meta["id_previous"] = previous_document.id
+
+            try:
+                previous_document = next(document_generator_backward)
+                next_document = next(document_generator_forward)
+            except StopIteration: 
+                break
+            """
