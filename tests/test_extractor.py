@@ -29,3 +29,6 @@ def test_extract():
 
 def test_preprocessing():
     pass
+
+def test_context():
+    pass
