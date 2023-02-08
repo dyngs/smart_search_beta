@@ -99,8 +99,13 @@ class SrExtractor(BaseComponent):
         return title, report_info
 
     @staticmethod
-    def get_context(paragraphs_list: List):
-
+    def get_context(paragraphs_list: List[str]):
+        """To extract context paragraphs, this function takes in a list of paragraphs ina document and shifts forwards
+        and backwards to create to contexts lists. The beginning and end paragraphs store None values.
+        :param paragraphs_lists: a list of paragraphs stored as str
+        :return paragraphs_previous: a list of paragraphs shifted back by 1; the first context paragraph is None
+        :return paragraphs_next: a list of paragraphs shifted forward by 1; the last context paragraph is None
+        """
         paragraphs_next = []
         for paragraph in paragraphs_list[1:]:
             paragraphs_next.append(paragraph)
@@ -111,6 +116,7 @@ class SrExtractor(BaseComponent):
             paragraphs_previous.append(paragraph)
 
         return paragraphs_previous, paragraphs_next
+
     def run(self, documents: List):
         """To extract paragraphs, this function breaks down a document into lines, then searches for metadata
         in the first 10 lines of the document. After that, it finds the first numbered paragraph and splits
