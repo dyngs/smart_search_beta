@@ -1,3 +1,4 @@
+from typing import Optional, List, Dict
 import time
 import haystack.nodes
 from haystack.document_stores.faiss import FAISSDocumentStore
@@ -8,8 +9,8 @@ from haystack.pipelines import Pipeline
 import os
 from special_reports_extractor import SrExtractor
 
-
 haystack.HAYSTACK_TELEMETRY_ENABLED = False
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -22,18 +23,17 @@ class Database:
         self.converter_text = None
         self.pre_processor = None
         self.extractor = None
-        self.current_number_of_documents = 0
         self.name = ""
 
     def load_document_store(self, faiss_index_path: str, faiss_config_path: str):
-
+        self.name = faiss_index_path[:-5]
         self.document_store = FAISSDocumentStore.load(index_path=faiss_index_path, config_path=faiss_config_path)
-        logging.info("Database loaded. Existing Document Store initialized.")
+        logger.info("Database loaded. Existing Document Store initialized.")
 
     def update_document_store(self, path_to_documents: str, retriever: haystack.nodes.EmbeddingRetriever):
 
         assert self.document_store is not None, "No Document Store to update. " \
-                                            "Please load a database or create a new one"
+                                                "Please load a database or create a new one"
         self.file_classifier = FileTypeClassifier()
         self.converter_pdf = PDFToTextOCRConverter()
         self.converter_docx = DocxToTextConverter()
@@ -51,8 +51,8 @@ class Database:
         new_documents = self.load_documents(path_to_documents)
         self.document_store.write_documents(new_documents)
         # add assertion, must be the same retriever
-        self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=True)
-        logging.info("New documents embedded. Database updated.")
+        self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=False)
+        logger.info("New documents embedded. Database updated.")
         """
         if not test:
             for f in os.listdir(tray_dir):
@@ -63,15 +63,15 @@ class Database:
         """
 
     def launch_new_document_store(self, set_file_name="special_reports_faiss_store"):
-        print(os.getcwd())
-        assert not os.path.exists(f"{os.getcwd()}/{set_file_name}.db"), "A Document Store with this name " \
-                                                                        "already exits. Please load it."
+        self.name = set_file_name
+        assert not os.path.exists(f"{os.getcwd()}/{self.name}.db"), "A Document Store with this name " \
+                                                                    "already exits. Please load it."
 
         self.document_store = FAISSDocumentStore(faiss_index_factory_str="Flat",
-                                                 sql_url=f"sqlite:///{set_file_name}.db",
+                                                 sql_url=f"sqlite:///{self.name}.db",
                                                  embedding_dim=768,
                                                  similarity="dot_product")
-        logging.info("Database created. Initialized a new Document Store")
+        logger.info("Database created. Initialized a new Document Store")
 
     def load_documents(self, path_to_documents: str):
         """This method take a relative path to a folder with documents of different types.
@@ -98,18 +98,39 @@ class Database:
             # Open path_to_documents and open one-by-one, classify the type,
             # convert to text, extract metadata and paragraphs
             converted_document = pipeline_preprocessing.run(file_paths=[os.path.join(path_to_documents, file)])
-            documents_processed.append(self.pre_processor.process(converted_document["documents"]))
+            documents_processed.extend(self.pre_processor.process(converted_document["documents"]))
 
-        self.current_number_of_documents += len(documents_processed[0])
+        logger.info("Database update successfully.")
 
-        logging.info("Database update successfully.")
+        return documents_processed
 
-        return documents_processed[0]
+    def save_database(self):
+        """This method saves the Document Store of the database."""
+        self.document_store.save(index_path=self.name + ".faiss")
 
-    def save_database(self, path: str):
-        """This method saves the Document Store of the database with a time stamp."""
+        logger.info("Database saved successfully.")
 
-        self.name = f"special_report_database_at_{str(int(time.time())).replace(' ', '_')}"
-        self.document_store.save(index_path=os.path.join(path, self.name + ".faiss"))
+    """
+    def append_context(self):
+        document_generator_forward = self.document_store.get_all_documents_generator()
+        document_generator_backward = self.document_store.get_all_documents_generator()
+        document_generator = self.document_store.get_all_documents_generator()
+        next(document_generator_forward)  # move to document #1
+        next_document_id = next(document_generator_forward)  # move to document #2
+        first_document = next(document_generator)
+        previous_document = next(document_generator_backward)
+        next_document = next(document_generator_forward)
+        first_document.meta["id_next"] = next_document_id.id
+        for document in document_generator:
+            if document.meta["title"] == next_document.meta["title"]:
+                document.meta["id_next"] = next_document.id
 
-        logging.info("Database saved successfully.")
+            if document.meta["title"] == previous_document.meta["title"]:
+                document.meta["id_previous"] = previous_document.id
+
+            try:
+                previous_document = next(document_generator_backward)
+                next_document = next(document_generator_forward)
+            except StopIteration: 
+                break
+            """
