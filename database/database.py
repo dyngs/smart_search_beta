@@ -7,7 +7,7 @@ from haystack.nodes import PreProcessor, DocxToTextConverter
 import logging
 from haystack.pipelines import Pipeline
 import os
-from special_reports_extractor import SrExtractor
+from database.special_reports_extractor import SrExtractor
 
 haystack.HAYSTACK_TELEMETRY_ENABLED = False
 logger = logging.getLogger(__name__)
