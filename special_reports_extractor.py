@@ -77,7 +77,7 @@ class SrExtractor(BaseComponent):
         return paragraph_number_list, paragraph_list
 
     @staticmethod
-    def extract_metadata(text_raw: list):
+    def extract_metadata(text_raw: List):
         """Given text documents, this method extracts documents metadata. Currently, it extracts only the title
         and report info.
         :param text_raw: a single document saved a list of separate lines
@@ -98,7 +98,20 @@ class SrExtractor(BaseComponent):
 
         return title, report_info
 
-    def run(self, documents: list):
+    @staticmethod
+    def get_context(paragraphs_list: List):
+
+        paragraphs_next = []
+        for paragraph in paragraphs_list[1:]:
+            paragraphs_next.append(paragraph)
+        paragraphs_next.append(None)
+
+        paragraphs_previous = [None]
+        for paragraph in paragraphs_list[:-1]:
+            paragraphs_previous.append(paragraph)
+
+        return paragraphs_previous, paragraphs_next
+    def run(self, documents: List):
         """To extract paragraphs, this function breaks down a document into lines, then searches for metadata
         in the first 10 lines of the document. After that, it finds the first numbered paragraph and splits
         the document. It converts paragraphs with metadata into a list of separate Documents.
@@ -108,8 +121,11 @@ class SrExtractor(BaseComponent):
         text_raw = self.document_preprocess_for_extraction(documents[0].content)
         title, report_info = self.extract_metadata(text_raw)
         paragraph_numbers, paragraphs = self.extract_paragraphs(text_raw)
-        meta_data = [{"title": title, "report_info": report_info,
-                      "paragraph_number": paragraph_number} for paragraph_number in paragraph_numbers]
+        paragraphs_previous, paragraphs_next = self.get_context(paragraphs)
+        meta_data = []
+        for paragraph_number, previous, nextp in zip(paragraph_numbers, paragraphs_previous, paragraphs_next):
+            meta_data.append({"title": title, "report_info": report_info, "paragraph_number": paragraph_number,
+                              "context_previous": previous, "context_next": nextp})
         documents_list = [{"content": paragraph, "meta": meta} for paragraph, meta in zip(paragraphs, meta_data)]
         documents_paragraphs = [Document.from_dict(document) for document in documents_list]
 
