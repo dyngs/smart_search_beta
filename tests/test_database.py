@@ -14,7 +14,7 @@ def test_launch_and_update():
     test_database = Database()
     test_database.launch_new_document_store(set_file_name="test2")
     retriever_test = EmbeddingRetriever(document_store=test_database.document_store,
-                                        embedding_model="models/4_eca_retriever_sr_distillbert-dot-tas_b-b256-msmarco",
+                                        embedding_model="models/4_eca_retriever_sr_distilbert-dot-tas_b-b256-msmarco",
                                         model_format="sentence_transformers")
     test_database.update_document_store('tests/data_test_database', retriever_test)
     assert test_database.document_store.get_embedding_count() == (72+141+86)

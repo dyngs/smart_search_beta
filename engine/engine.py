@@ -11,7 +11,7 @@ import haystack
 from haystack.nodes import EmbeddingRetriever, SentenceTransformersRanker, BM25Retriever
 from database import Database
 
-logging.getLogger("engine")
+logger = logging.getLogger("engine")
 
 
 class Engine:
@@ -40,9 +40,12 @@ class Engine:
         self.dev_on = on
 
     def make_query_sentence(self, query: str, top_k: int):
+        logger.info("Candidate paragraphs retrieved.")
         return self.sentence_retriever.retrieve(query=query, top_k=top_k)
 
+
     def make_query_word(self, query: str, top_k: int):
+        logger.info("Candidate paragraphs retrieved.")
         return self.word_retriever.retrieve(query=query, top_k=top_k, all_terms_must_match=True)
 
     def load_reader(self, model_path_or_name: str):
@@ -71,6 +74,7 @@ class Engine:
                 results.append(document)
             else:
                 break
+        logger.info("Paragraphs re-ranked.")
         return results
 
     def run(self, query: str, top_k: int, min_similarity=0.0):
