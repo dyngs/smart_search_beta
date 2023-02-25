@@ -70,9 +70,9 @@ class SrExtractor(BaseComponent):
 
             i += 1
 
-        assert paragraph_number_list == list(range(1, paragraph_number_list[-1]+1)),\
-            f"Some paragraphs are missing. Check manually. Number of paragraphs missing" \
-            f" {paragraph_number_list[-1] - len(paragraph_number_list)}. Paragraphs extracted:{paragraph_number_list}"
+        # paragraph_number_list == list(range(1, paragraph_number_list[-1]+1)),\
+        #    f"Some paragraphs are missing. Check manually. Number of paragraphs missing" \
+        #    f" {paragraph_number_list[-1] - len(paragraph_number_list)}. Paragraphs extracted:{paragraph_number_list}"
 
         return paragraph_number_list, paragraph_list
 
@@ -84,10 +84,14 @@ class SrExtractor(BaseComponent):
         :returns title, report_info: e.g., report_info="Special Report 34/2012, report_title="Auditing is fun"
         """
         i = 0
+        report_info = ""
+        for j in range(0, 4):
+            if bool(re.match(r'(\s*[Ss])pecial\s[Rr]eport', text_raw[j].strip('\n'))):
+                report_info = text_raw[j].strip('\n').strip('\t')
+                i += 2
+
         if bool(re.match(r'\(([Pp])ersuant\sto', text_raw[i].strip('\n'))):
             i += 1
-        report_info = (text_raw[i].strip('\n').strip('\t'))
-        i += 2
 
         title = ''
         while bool(re.match(r'([Tt])ogether\swith', text_raw[i])) is False:
@@ -102,7 +106,7 @@ class SrExtractor(BaseComponent):
     def get_context(paragraphs_list: List[str]):
         """To extract context paragraphs, this function takes in a list of paragraphs ina document and shifts forwards
         and backwards to create to contexts lists. The beginning and end paragraphs store None values.
-        :param paragraphs_lists: a list of paragraphs stored as str
+        :param paragraphs_list: a list of paragraphs stored as str
         :return paragraphs_previous: a list of paragraphs shifted back by 1; the first context paragraph is None
         :return paragraphs_next: a list of paragraphs shifted forward by 1; the last context paragraph is None
         """

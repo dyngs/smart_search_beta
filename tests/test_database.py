@@ -1,7 +1,7 @@
 import os
 import sys
 from haystack.nodes import EmbeddingRetriever
-from database import Database
+from database.database import Database
 
 def test_create():
     test_database = Database()
