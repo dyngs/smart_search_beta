@@ -26,7 +26,7 @@ class Database:
         self.name = ""
 
     def load_document_store(self, faiss_index_path: str, faiss_config_path: str):
-        self.name = faiss_index_path[:-5]
+        self.name = faiss_index_path[:-6]
         self.document_store = FAISSDocumentStore.load(index_path=faiss_index_path, config_path=faiss_config_path)
         logger.info("Database loaded. Existing Document Store initialized.")
 
@@ -72,7 +72,7 @@ class Database:
         :return: haystack Documents"""
 
         self.file_classifier = FileTypeClassifier()
-        self.converter_pdf = PDFToTextOCRConverter()
+        self.converter_pdf = PDFToTextConverter(remove_numeric_tables=True)
         self.converter_docx = DocxToTextConverter()
         self.converter_text = TextConverter()
         self.extractor = SrExtractor()

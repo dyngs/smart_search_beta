@@ -68,6 +68,22 @@ class SrExtractor(BaseComponent):
                 paragraph += ' ' + text_raw[i].strip('\n').rstrip()
                 paragraph_list.append(paragraph)
 
+            # if bool(re.match(r'^\d\d\t', text_raw[i][0:10])):
+            #     if bool(paragraph_number_list[i-1] == text_raw[i][0:2]):
+            #         paragraph_number_list.append(int(text_raw[i][0:2]))
+            #         paragraph += text_raw[i][4:].strip('\n').rstrip()
+            #         i += 1
+            #
+            #         # add to the current paragraph until a new one is detected or breaking condition met
+            #         while bool(re.match(r'^(\d\d\t)', text_raw[i + 1][:5])) is False:
+            #
+            #             if bool(re.match(r'This((\sSpecial\s)|\s)([Rr])eport\swas\sadopted\sby', text_raw[i + 1])):
+            #                 break
+            #             paragraph += ' ' + text_raw[i].strip('\n').rstrip()
+            #             i += 1
+            #
+            #         paragraph += ' ' + text_raw[i].strip('\n').rstrip()
+            #         paragraph_list.append(paragraph)
             i += 1
 
         # paragraph_number_list == list(range(1, paragraph_number_list[-1]+1)),\
@@ -88,9 +104,9 @@ class SrExtractor(BaseComponent):
         for j in range(0, 4):
             if bool(re.match(r'(\s*[Ss])pecial\s[Rr]eport', text_raw[j].strip('\n'))):
                 report_info = text_raw[j].strip('\n').strip('\t')
-                i += 2
+                i += 3
 
-        if bool(re.match(r'\(([Pp])ersuant\sto', text_raw[i].strip('\n'))):
+        if bool(re.match(r'\([Pp]ersuant\sto', text_raw[i].strip('\n'))):
             i += 1
 
         title = ''
@@ -128,6 +144,7 @@ class SrExtractor(BaseComponent):
         :param documents: a single Document of a special report
         :return output: a dict with a list of paragraphs saved with key "documents" (as required by haystack.pipeline)
         """
+        print(documents[0].content)
         text_raw = self.document_preprocess_for_extraction(documents[0].content)
         title, report_info = self.extract_metadata(text_raw)
         paragraph_numbers, paragraphs = self.extract_paragraphs(text_raw)

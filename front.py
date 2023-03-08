@@ -14,7 +14,7 @@ from streamlit_extras.add_vertical_space import add_vertical_space
 import time
 import json
 
-# file imports
+# image imports
 path = "images/67532-artificial-intelligence-robot.json"
 with open(path,"r") as file:
     robot = json.load(file)
@@ -50,7 +50,7 @@ if 'engine' not in st.session_state:
                                      index_config_path="test_context_database.json",
                                      retriever_path="models/4_eca_retriever_sr_distilbert-dot-tas_b-b256-msmarco")
     st.session_state.engine.load_reader(model_path_or_name="cross-encoder/ms-marco-TinyBERT-L-2-v2")
-    add_vertical_space(15)
+    add_vertical_space(30)
 
 
 with st.sidebar:
@@ -104,6 +104,41 @@ if st.session_state.query != "" or st.session_state.search_clicked:
         if len(results) > 0:
             st.success(f'Searched {st.session_state.engine.database.document_store.get_embedding_count()} '
                        f'records in {round(search_time,2) } seconds \n')
+            # print results
+            for i in range(len(results)):
+                text_meta = str(str(i + 1) + '.' + ' Paragraph ' + str(results[i].meta["paragraph_number"]))
+                text_meta += str(' in ' + results[i].meta["report_info"] + '\n')
+                text = str("\n" + results[i].content)
+                if st.session_state.use_reranker:
+                    text_score = str(
+                        'Similarity Score: ' + str("{:.1f}".format(results[i].score * 100)) + '%' + '\n\n\n')
+                with st.container():
+                    st.subheader(text_meta)
+                    st.write(text)
+                    st.write("\n\n")
+                    if st.session_state.use_reranker:
+                        st.write(text_score, unsafe_allow_html=True)
+                    with st.expander("See context"):
+                        if results[i].meta["context_previous"] is not None:
+                            text_long = str("\n" + results[i].meta["context_previous"] + "\n")
+                        else:
+                            text_long = "<_document_ _begins_ _here_>"
+
+                        if results[i].meta["context_next"] is not None:
+                            text_long_2 = str("\n" + results[i].meta["context_next"] + "\n")
+
+                        else:
+                            text_long_2 = "<_document_ _ends_ _here_>"
+
+                        st.write(text_long)
+                        st.write(text)
+                        st.write(text_long_2)
+            add_vertical_space(5)
+            st.download_button(label="Download these results",
+                               data=text,
+                               file_name=f'{st.session_state.query}_results.txt',
+                               mime='text'
+                               )
         else:
             st.error("Sorry! None of the paragraphs meet your search criteria. You can adjust them in the sidebar.")
             _left, mid, _right = st.columns([7, 20, 7])
@@ -117,33 +152,6 @@ if st.session_state.query != "" or st.session_state.search_clicked:
                           quality='high',
                           key='NotFound')
 
-        for i in range(len(results)):
-            text_meta = str(str(i+1) + '.' + ' Paragraph ' + str(results[i].meta["paragraph_number"]))
-            text_meta += str(' in ' + results[i].meta["report_info"] + '\n')
-            text = str("\n" + results[i].content)
-            if st.session_state.use_reranker:
-                text_score = str('Similarity Score: ' + str("{:.1f}".format(results[i].score * 100)) + '%' + '\n\n\n')
-            with st.container():
-                st.subheader(text_meta)
-                st.write(text)
-                st.write("\n\n")
-                if st.session_state.use_reranker:
-                    st.write(text_score, unsafe_allow_html=True)
-                with st.expander("See context"):
-                    if results[i].meta["context_previous"] is not None:
-                        text_long = str("\n" + results[i].meta["context_previous"] + "\n")
-                    else:
-                        text_long = "<_document_ _begins_ _here_>"
-
-                    if results[i].meta["context_next"] is not None:
-                        text_long_2 = str("\n" + results[i].meta["context_next"] + "\n")
-
-                    else:
-                        text_long_2 = "<_document_ _ends_ _here_>"
-
-                    st.write(text_long)
-                    st.write(text)
-                    st.write(text_long_2)
 #disable search
 st.session_state.search_clicked = False
 
