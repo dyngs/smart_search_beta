@@ -39,7 +39,7 @@ class Database:
         assert len(tray_dir) > 0, f"{tray_dir} is empty. Please provide a non-empty directory."
         new_documents = []
         for document in os.listdir(path_to_documents):
-            new_documents.append(self.load_documents(os.path.join(path_to_documents, document)))
+            new_documents.extend(self.load_documents(os.path.join(path_to_documents, document)))
         self.document_store.write_documents(new_documents)
         # add assertion, must be the same retriever
         self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=False)
