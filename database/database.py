@@ -26,7 +26,7 @@ class Database:
         self.name = ""
 
     def load_document_store(self, faiss_index_path: str, faiss_config_path: str):
-        self.name = faiss_index_path[:-5]
+        self.name = faiss_index_path[:-6]
         self.document_store = FAISSDocumentStore.load(index_path=faiss_index_path, config_path=faiss_config_path)
         logger.info("Database loaded. Existing Document Store initialized.")
 
@@ -34,21 +34,12 @@ class Database:
 
         assert self.document_store is not None, "No Document Store to update. " \
                                                 "Please load a database or create a new one"
-        self.file_classifier = FileTypeClassifier()
-        self.converter_pdf = PDFToTextOCRConverter()
-        self.converter_docx = DocxToTextConverter()
-        self.converter_text = TextConverter()
-        self.extractor = SrExtractor()
-        self.pre_processor = PreProcessor(clean_empty_lines=True,
-                                          clean_whitespace=True,
-                                          clean_header_footer=True,
-                                          split_by="passage",
-                                          split_respect_sentence_boundary=False,
-                                          split_overlap=0)
 
         tray_dir = os.listdir(path_to_documents)
         assert len(tray_dir) > 0, f"{tray_dir} is empty. Please provide a non-empty directory."
-        new_documents = self.load_documents(path_to_documents)
+        new_documents = []
+        for document in os.listdir(path_to_documents):
+            new_documents.extend(self.load_documents(os.path.join(path_to_documents, document)))
         self.document_store.write_documents(new_documents)
         # add assertion, must be the same retriever
         self.document_store.update_embeddings(retriever=retriever, update_existing_embeddings=False)
@@ -73,14 +64,24 @@ class Database:
                                                  similarity="dot_product")
         logger.info("Database created. Initialized a new Document Store")
 
-    def load_documents(self, path_to_documents: str):
+    def load_documents(self, path_to_file: str):
         """This method take a relative path to a folder with documents of different types.
         It converts them to text files and splits into paragraphs.
         It, then, saves all files into a new folder [name]_paragraphs.
         :param: path_to_documents: relative path to the folder with new documents (pdf,text, or docx)
         :return: haystack Documents"""
 
-        documents_processed = []
+        self.file_classifier = FileTypeClassifier()
+        self.converter_pdf = PDFToTextConverter(remove_numeric_tables=True)
+        self.converter_docx = DocxToTextConverter()
+        self.converter_text = TextConverter()
+        self.extractor = SrExtractor()
+        self.pre_processor = PreProcessor(clean_empty_lines=True,
+                                          clean_whitespace=True,
+                                          clean_header_footer=True,
+                                          split_by="passage",
+                                          split_respect_sentence_boundary=False,
+                                          split_overlap=0)
 
         pipeline_preprocessing = Pipeline()
         pipeline_preprocessing.add_node(component=self.file_classifier, name="FileTypeClassifier",
@@ -94,13 +95,11 @@ class Database:
         pipeline_preprocessing.add_node(component=self.extractor, name="SrExtractor",
                                         inputs=["TextConverter", "PdfConverter", "DocxConverter"])
 
-        for file in os.listdir(path_to_documents):
-            # Open path_to_documents and open one-by-one, classify the type,
-            # convert to text, extract metadata and paragraphs
-            converted_document = pipeline_preprocessing.run(file_paths=[os.path.join(path_to_documents, file)])
-            documents_processed.extend(self.pre_processor.process(converted_document["documents"]))
 
-        logger.info("Database update successfully.")
+        converted_document = pipeline_preprocessing.run(file_paths=[path_to_file])
+        documents_processed = self.pre_processor.process(converted_document["documents"])
+
+        logger.info("Documents pre-processed successfully.")
 
         return documents_processed
 
