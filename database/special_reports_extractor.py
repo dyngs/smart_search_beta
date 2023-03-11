@@ -30,7 +30,10 @@ class SrExtractor(BaseComponent):
     @staticmethod
     def extract_paragraphs(text_raw: list):
         """Given text documents, this method splits them into numbered paragraphs
-        and saves the number of each paragraph.
+        and saves the number of each paragraph. It detects paragraphs in two ways:
+        -OPTION #1-  Every paragraph starts with ^(\d|\d\d|\d\d\d)\.\t
+                    aka it assumes there is a "." after the paragraph number (1/2/3 digits)
+        -OPTION #2-
         :param text_raw: a single document saved a list of separate lines
         :returns paragraph_numer_list, paragraph_list:
             list of paragraph numbers, list of paragraphs
@@ -41,8 +44,9 @@ class SrExtractor(BaseComponent):
         paragraph_list = []
         while bool(re.match(r'This((\sSpecial\s)|\s)([Rr])eport\swas\sadopted\sby', text_raw[i])) is False:
             paragraph = ''
-            # every paragraph must start with the number + '.' + tab sequence
 
+            # OPTION 1: Every paragraph starts with ^(\d|\d\d|\d\d\d)\.\t
+            # aka it assumes there is a "." after the paragraph number (1/2/3 digits)
             if bool(re.match(r'^(\d|\d\d|\d\d\d)\.\t', text_raw[i][0:10])):
                 if bool(re.match(r'^\d\d\.', text_raw[i])):
                     paragraph_number_list.append(int(text_raw[i][0:2]))
@@ -57,7 +61,8 @@ class SrExtractor(BaseComponent):
                     paragraph += text_raw[i][3:].strip('\n').rstrip()
                     i += 1
 
-                # add to the current paragraph until a new one is detected or breaking condition met
+                # Add to the current paragraph until a new one is detected or breaking condition met,
+                # i.e. a new numbered paragraph detected or end of the main section met.
                 while bool(re.match(r'^(\d|\d\d|\d\d\d)\.', text_raw[i+1][:5])) is False:
 
                     if bool(re.match(r'This((\sSpecial\s)|\s)([Rr])eport\swas\sadopted\sby', text_raw[i+1])):
@@ -68,22 +73,68 @@ class SrExtractor(BaseComponent):
                 paragraph += ' ' + text_raw[i].strip('\n').rstrip()
                 paragraph_list.append(paragraph)
 
-            # if bool(re.match(r'^\d\d\t', text_raw[i][0:10])):
-            #     if bool(paragraph_number_list[i-1] == text_raw[i][0:2]):
-            #         paragraph_number_list.append(int(text_raw[i][0:2]))
-            #         paragraph += text_raw[i][4:].strip('\n').rstrip()
-            #         i += 1
-            #
-            #         # add to the current paragraph until a new one is detected or breaking condition met
-            #         while bool(re.match(r'^(\d\d\t)', text_raw[i + 1][:5])) is False:
-            #
-            #             if bool(re.match(r'This((\sSpecial\s)|\s)([Rr])eport\swas\sadopted\sby', text_raw[i + 1])):
-            #                 break
-            #             paragraph += ' ' + text_raw[i].strip('\n').rstrip()
-            #             i += 1
-            #
-            #         paragraph += ' ' + text_raw[i].strip('\n').rstrip()
-            #         paragraph_list.append(paragraph)
+            # OPTION 2: Every paragraph starts with \d\d(\d)?(\s|\t) aka no "." after the paragraph number
+            # aka there is no "." after the paragraph number (2/3 digits)
+            # print(text_raw[i][0:3])
+            if bool(re.match(r'^\d\d(\d)?(\s|\t)', text_raw[i][0:5])):
+                try:
+                    number_before = paragraph_number_list[-1]
+                except IndexError:
+                    number_before = 0
+
+                if bool(int(text_raw[i][0]) == 0):
+                    current_number = int(text_raw[i][1])
+                elif bool(re.match(r'\d', text_raw[i][2])):
+                    current_number = int(text_raw[i][0:3])
+                else:
+                    current_number = int(text_raw[i][0:2])
+
+                if bool(number_before == (current_number - 1)):
+                    paragraph_number_list.append(current_number)
+                    if current_number > 99:
+                        paragraph += text_raw[i][4:].strip('\n').rstrip()
+                    else:
+                        paragraph += text_raw[i][3:].strip('\n').rstrip()
+
+                    i += 1
+
+                    # Check if the next line begins with a 2 or 3 digit sequence
+                    try:
+                        if bool(re.match(r'\d\d\d', text_raw[i+1][0:2])): # 3 digits
+                            next_number = int(text_raw[i+1][0:3])
+                        elif bool(re.match(r'\d\d', text_raw[i+1][0:1])): # 2 digits
+                            next_number = int(text_raw[i+1][0:2])
+                        else:                                             # no digits; will raise ValueError at casting
+                            next_number = int(text_raw[i + 1][0:2])
+                    except ValueError:
+                        next_number = -1
+                    except IndexError:
+                        next_number = current_number + 1
+
+                    # Add to the current paragraph until a new one is detected or breaking condition met
+                    # Here the next paragraph must have a number that is 1 higher than the current one
+                    while bool(re.match(r'^\d\d(\d)?(\s|\t)', text_raw[i + 1][:5]) and next_number == current_number + 1) is False:
+
+                        if bool(re.match(r"This((\sSpecial\s)|\s)([Rr])eport\swas\sadopted\sby", text_raw[i + 1])) :
+                            break
+                        paragraph += ' ' + text_raw[i].strip('\n').rstrip()
+                        i += 1
+
+                        try:
+                            if bool(re.match(r'\d', text_raw[i + 1][2])):
+                                next_number = int(text_raw[i + 1][0:3])
+                            elif bool(re.match(r'\d\d', text_raw[i + 1][0:1])):
+                                next_number = int(text_raw[i + 1][0:2])
+                            else:
+                                next_number = int(text_raw[i + 1][0:2])
+                        except ValueError:
+                            next_number = -1
+                        except IndexError:
+                            next_number = current_number + 1
+
+                    paragraph += ' ' + text_raw[i].strip('\n').rstrip()
+                    paragraph_list.append(paragraph)
+                    # print(paragraph)
             i += 1
 
         # paragraph_number_list == list(range(1, paragraph_number_list[-1]+1)),\
@@ -144,8 +195,10 @@ class SrExtractor(BaseComponent):
         :param documents: a single Document of a special report
         :return output: a dict with a list of paragraphs saved with key "documents" (as required by haystack.pipeline)
         """
-        print(documents[0].content)
+        # print(documents[0].content)
         text_raw = self.document_preprocess_for_extraction(documents[0].content)
+        with open("new_format.txt", "w") as f:
+            f.writelines(text_raw)
         title, report_info = self.extract_metadata(text_raw)
         paragraph_numbers, paragraphs = self.extract_paragraphs(text_raw)
         paragraphs_previous, paragraphs_next = self.get_context(paragraphs)
