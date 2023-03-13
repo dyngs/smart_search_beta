@@ -1,14 +1,13 @@
 import re
-import os
 import logging
 from typing import List
-
+import datetime
 from haystack.nodes.base import BaseComponent
 from haystack import Document
 
+logger = logging.getLogger(__name__)
 
 class SrExtractor(BaseComponent):
-
     outgoing_edges = 1
 
     @staticmethod
@@ -31,9 +30,10 @@ class SrExtractor(BaseComponent):
     def extract_paragraphs(text_raw: list):
         """Given text documents, this method splits them into numbered paragraphs
         and saves the number of each paragraph. It detects paragraphs in two ways:
-        -OPTION #1-  Every paragraph starts with ^(\d|\d\d|\d\d\d)\.\t
+        -OPTION #1- Every paragraph starts with ^(\d|\d\d|\d\d\d)\.\t
                     aka it assumes there is a "." after the paragraph number (1/2/3 digits)
-        -OPTION #2-
+        -OPTION #2- Every paragraph starts with \d\d(\d)?(\s|\t) aka no "." after the paragraph number
+                    aka there is no "." after the paragraph number (2/3 digits)
         :param text_raw: a single document saved a list of separate lines
         :returns paragraph_numer_list, paragraph_list:
             list of paragraph numbers, list of paragraphs
@@ -151,21 +151,33 @@ class SrExtractor(BaseComponent):
         :returns title, report_info: e.g., report_info="Special Report 34/2012, report_title="Auditing is fun"
         """
         i = 0
-        report_info = ""
+        title = ""
         for j in range(0, 4):
-            if bool(re.match(r'(\s*[Ss])pecial\s[Rr]eport', text_raw[j].strip('\n'))):
+            if bool(re.match(r'(\s*[Ss])pecial\s[Rr]eport\s[Nn][Oo]', text_raw[j].strip('\n'))):
                 report_info = text_raw[j].strip('\n').strip('\t')
                 i += 3
+            elif bool(re.match(r'(\s*[Ss])pecial\s[Rr]eport', text_raw[j].strip('\n'))):
+                report_info = "Special report "
+
 
         if bool(re.match(r'\([Pp]ersuant\sto', text_raw[i].strip('\n'))):
             i += 1
 
-        title = ''
-        while bool(re.match(r'([Tt])ogether\swith', text_raw[i])) is False:
-            title += text_raw[i].strip('\n')
+
+        while bool(re.match(r'([Tt])ogether\swith', text_raw[i]) or re.match(r'(CONTENTS)|(Contents)|(contents)', text_raw[i])) is False:
+            title += text_raw[i].strip('\n') + ' '
             i += 1
             if i > 10:
                 break
+
+        if bool(re.match(r'(\s*[Ss])pecial\s[Rr]eport\s((?!N|no).)*$', text_raw[0].strip('\n'))):
+            try:
+                report_info += "No " + re.search(r'\d\d', title[-14:-1]).group() + "/" + re.search(r'2\d\d\d', title[-14:-1]).group()
+            except AttributeError:
+                report_info = "Special Report XX/20XX"
+            title = title[15:-14]
+
+        logger.info(f"{datetime.datetime}Metadata extracted.")
 
         return title, report_info
 
@@ -195,7 +207,7 @@ class SrExtractor(BaseComponent):
         :param documents: a single Document of a special report
         :return output: a dict with a list of paragraphs saved with key "documents" (as required by haystack.pipeline)
         """
-        # print(documents[0].content)
+
         text_raw = self.document_preprocess_for_extraction(documents[0].content)
         with open("new_format.txt", "w") as f:
             f.writelines(text_raw)

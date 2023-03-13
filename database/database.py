@@ -72,7 +72,7 @@ class Database:
         :return: haystack Documents"""
 
         self.file_classifier = FileTypeClassifier()
-        self.converter_pdf = PDFToTextConverter(remove_numeric_tables=True)
+        self.converter_pdf = PDFToTextConverter(remove_numeric_tables=False) #F for proper meta data extraction
         self.converter_docx = DocxToTextConverter()
         self.converter_text = TextConverter()
         self.extractor = SrExtractor()
