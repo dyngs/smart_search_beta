@@ -28,16 +28,17 @@ st.session_state.conversion_start = st.button("Convert", help="Clicking on this 
 def call_database():
     st.session_state.disable_meta = True # need this only once on initialization
     database_eca = Database()
-    database_eca.load_document_store(faiss_index_path="test_dev_db.faiss", faiss_config_path="test_dev_db.json")
+    database_eca.load_document_store(faiss_index_path="../test_dev_db.faiss", faiss_config_path="../test_dev_db.json")
     return database_eca
 
 database_eca = call_database()
 
 
 if st.session_state.conversion_start:
-    if len(os.listdir("data/tray")) < 1:
+    if len(os.listdir("../data/tray")) < 1:
         st.error("At least 1 documents is required.")
-    st.session_state.documents = [database_eca.load_documents(os.path.join("data/tray", document)) for document in os.listdir("data/tray")]
+    st.session_state.documents = [database_eca.load_documents(os.path.join("../data/tray", document)) for document in os.listdir(
+        "../data/tray")]
     st.session_state.disable_meta = False
     # duplicate the last report for correct functionality
     st.session_state.documents.append(st.session_state.documents[-1])
@@ -101,7 +102,7 @@ if not st.session_state.disable_meta:
             approved_document[0].meta["report_info"]
 
         st.session_state.percent_completed_embed = database_eca.document_store.get_embedding_count() / len(
-            os.listdir("data/tray"))
+            os.listdir("../data/tray"))
         col_1, col_2, col_3, col_4 = st.columns(4)
 
         with col_1:
